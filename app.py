@@ -45,6 +45,10 @@ def download_file(filename):
         return send_file(os.path.join(app.config['UPLOAD_FOLDER'], filename), as_attachment=True)
     except Exception as e:
         return jsonify({'error': str(e)}), 404
+    
+@app.route('/hc', methods=['GET'])
+def health():
+   return 'Healthy', 200
 
 @app.errorhandler(403)
 def forbidden_error(error):
