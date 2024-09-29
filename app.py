@@ -30,7 +30,7 @@ def process():
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
             locations = request.form.getlist('locations')
-            result_files, location_pages = process_pdf(file_path, locations)
+            result_files, location_pages = process_pdf(file_path, locations, filename)
             return jsonify({
                 'files': result_files,
                 'location_pages': location_pages

@@ -18,7 +18,7 @@ def find_locations_in_pages(pages_text, expected_locations):
                 location_pages[location].append(i + 1)  # Adding 1 to make page numbers 1-indexed
     return location_pages
 
-def process_pdf(input_pdf, expected_locations):
+def process_pdf(input_pdf, expected_locations, filename):
     reader = PdfReader(input_pdf)
     pages_text = extract_text_from_pdf(input_pdf)
     location_pages = find_locations_in_pages(pages_text, expected_locations)
@@ -30,7 +30,7 @@ def process_pdf(input_pdf, expected_locations):
         for page_num in page_numbers:
             writer.add_page(reader.pages[page_num - 1])  # Subtracting 1 to convert back to 0-indexed
         
-        output_pdf = f"processed_{location.replace(' ', '_')}_pages.pdf"
+        output_pdf = f"{location.replace(' ', '_')}_{filename}.pdf"
         output_path = os.path.join('uploads', output_pdf)
         with open(output_path, "wb") as output_file:
             writer.write(output_file)
