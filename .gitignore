@@ -9,3 +9,6 @@ htmlcov/
 .tox/
 docs/_build/
 /uploads
+.venv/
+venv/
+venv*/
