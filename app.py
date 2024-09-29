@@ -58,6 +58,7 @@ def forbidden_error(error):
 def internal_error(error):
     return jsonify({'error': 'Internal Server Error', 'message': str(error)}), 500
 
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 if __name__ == '__main__':
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     app.run(debug=True)
