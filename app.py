@@ -4,6 +4,10 @@ from werkzeug.utils import secure_filename
 from flasgger import Swagger, swag_from
 import os
 import traceback
+from doctr.io import DocumentFile
+from doctr.models import ocr_predictor,kie_predictor
+from PIL import Image
+import io
 from pdf_processor import process_pdf
 
 app = Flask(__name__)
@@ -28,7 +32,7 @@ swagger_config = {
 Swagger(app, config=swagger_config)
 
 UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'pdf'}
+ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB limit
@@ -148,6 +152,99 @@ def download_file(filename):
 })
 def health():
    return 'Healthy', 200
+
+# Initialize the OCR model
+ocr_model = ocr_predictor(
+    det_arch='db_resnet50', 
+    reco_arch='crnn_vgg16_bn',
+    pretrained=True,
+    assume_straight_pages=False,
+    preserve_aspect_ratio=True,
+    export_as_straight_boxes=False
+)               
+
+@app.route('/ocr', methods=['POST'])
+@swag_from({
+    'tags': ['Document Processing'],
+    'summary': 'Perform OCR on a PDF or image file',
+    'description': 'Upload a PDF or image file and perform OCR using Mindee DocTR',
+    'parameters': [
+        {
+            'name': 'file',
+            'in': 'formData',
+            'type': 'file',
+            'required': True,
+            'description': 'PDF or image file to process'
+        }
+    ],
+    'responses': {
+        200: {
+            'description': 'Successful operation',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'text': {
+                        'type': 'string',
+                        'description': 'Extracted text from the document'
+                    }
+                }
+            }
+        },
+        400: {
+            'description': 'Bad request'
+        },
+        500: {
+            'description': 'Internal server error'
+        }
+    }
+})
+def perform_ocr():
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part'}), 400
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            
+            # Determine file type and process accordingly
+            file_extension = filename.rsplit('.', 1)[1].lower()
+            if file_extension == 'pdf':
+                doc = DocumentFile.from_pdf(file_path)
+            else:  # Image file
+                doc = DocumentFile.from_images(file_path)
+            
+
+            result = ocr_model(doc)
+            
+            # Extract text from the OCR result
+            extracted_text = []
+            for page in result.pages:
+                page_text = []
+                for block in page.blocks:
+                    for line in block.lines:
+                        line_text = ' '.join(word.value for word in line.words)
+                        page_text.append(line_text)
+                extracted_text.append('\n'.join(page_text))
+
+
+            
+            
+            # Join all pages with double newlines
+            full_text = '\n\n'.join(extracted_text)
+            #logger.info(f"OCR completed successfully for file: {filename}")
+            # Clean up: remove the temporary file
+            os.remove(file_path)
+            
+            return jsonify({
+                'text': full_text
+            }), 200
+        return jsonify({'error': 'Invalid file type'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 @app.errorhandler(403)
 def forbidden_error(error):

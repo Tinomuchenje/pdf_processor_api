@@ -54,6 +54,8 @@ The `pdf_processor.py` module handles the core functionality of PDF processing:
 2. Searches for specified locations within the PDF text
 3. Creates new PDFs for each location, containing relevant pages
 
+## Local run
+
 ## Docker Configuration
 
 The project includes a Dockerfile for containerization, which:
@@ -82,3 +84,33 @@ The project includes a Dockerfile for containerization, which:
 5. Download split PDFs using the `/download/<filename>` endpoint
 
 This application provides a robust solution for PDF processing and splitting, with a focus on ease of use and deployment through Docker containerization.
+
+
+## OCR Model Options
+Text Detection Models:
+
+# Available architectures: 'db_resnet50', 'db_mobilenet_v3_large', 'linknet_resnet18', 'linknet_resnet34', 'linknet_resnet50'
+det_model = detection_predictor('db_resnet50', pretrained=True)
+
+Text Recognition Models:
+# Available architectures: 'crnn_vgg16_bn', 'crnn_mobilenet_v3_small', 'crnn_mobilenet_v3_large', 'sar_resnet31', 'master'
+reco_model = recognition_predictor('crnn_vgg16_bn', pretrained=True)
+
+
+End-to-End OCR Models:
+# You can specify both detection and recognition architectures
+ocr_model = ocr_predictor(
+    det_arch='db_resnet50',
+    reco_arch='crnn_vgg16_bn',
+    pretrained=True
+)
+
+4. Key Information Extraction (KIE) Models:
+# Available architectures: 'db_resnet50', 'crnn_vgg16_bn'
+kie_model = kie_predictor(
+    det_arch='db_resnet50',
+    reco_arch='crnn_vgg16_bn',
+    pretrained=True
+)
+
+KIE models not only perform OCR but also classify the extracted text into predefined categories, which can be useful for more structured document processing tasks.
