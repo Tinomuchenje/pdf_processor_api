@@ -114,3 +114,5 @@ kie_model = kie_predictor(
 )
 
 KIE models not only perform OCR but also classify the extracted text into predefined categories, which can be useful for more structured document processing tasks.
+
+pip freeze > requirements.txt
