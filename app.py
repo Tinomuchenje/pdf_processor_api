@@ -39,8 +39,8 @@ def allowed_file(filename):
 @app.route('/process', methods=['POST'])
 @swag_from({
     'tags': ['PDF Processing'],
-    'summary': 'Process a PDF file',
-    'description': 'Upload a PDF file and specify locations to group pages',
+    'summary': 'Process a PDF file with intelligent Building column search',
+    'description': 'Upload a PDF file and specify locations to search for. Uses intelligent Building column detection for improved accuracy on invoice tables. Automatically falls back to full-page search if needed. Includes OCR support for scanned PDFs.',
     'parameters': [
         {
             'name': 'file',
@@ -56,7 +56,21 @@ def allowed_file(filename):
             'items': {'type': 'string'},
             'collectionFormat': 'multi',
             'required': True,
-            'description': 'List of locations to search for in the PDF'
+            'description': 'List of locations to search for. System intelligently searches in Building column first for better accuracy.'
+        },
+        {
+            'name': 'use_building_column',
+            'in': 'formData',
+            'type': 'boolean',
+            'required': False,
+            'description': 'Whether to use intelligent Building column search (default: true for improved accuracy)'
+        },
+        {
+            'name': 'use_ocr_fallback',
+            'in': 'formData',
+            'type': 'boolean',
+            'required': False,
+            'description': 'Whether to use OCR fallback for scanned PDFs (default: true)'
         }
     ],
     'responses': {
@@ -75,6 +89,18 @@ def allowed_file(filename):
                             'type': 'array',
                             'items': {'type': 'integer'}
                         }
+                    },
+                    'building_info': {
+                        'type': 'object',
+                        'description': 'Building information extracted from each page for transparency'
+                    },
+                    'search_method': {
+                        'type': 'string',
+                        'description': 'Search method used (building_column_with_fallback by default for improved accuracy)'
+                    },
+                    'improved_accuracy': {
+                        'type': 'boolean',
+                        'description': 'Whether improved building column search was used'
                     }
                 }
             }
@@ -99,10 +125,21 @@ def process():
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
             locations = request.form.getlist('locations')
-            result_files, location_pages = process_pdf(file_path, locations, filename)
+            # Always use building column search for improved accuracy (default: true)
+            use_building_column = request.form.get('use_building_column', 'true').lower() == 'true'
+            use_ocr_fallback = request.form.get('use_ocr_fallback', 'true').lower() == 'true'
+            result_files, location_pages, building_info = process_pdf(
+                file_path, locations, filename, use_building_column, use_ocr_fallback
+            )
+            # Determine actual search method used
+            search_method = 'building_column_with_fallback' if use_building_column else 'full_page_search'
+            
             return jsonify({
                 'files': result_files,
-                'location_pages': location_pages
+                'location_pages': location_pages,
+                'building_info': building_info,
+                'search_method': search_method,
+                'improved_accuracy': use_building_column
             }), 200
         return jsonify({'error': 'Invalid file type'}), 400
     except Exception as e:
