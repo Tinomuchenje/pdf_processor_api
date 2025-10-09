@@ -20,3 +20,5 @@ referencing==0.35.1
 rpds-py==0.20.0
 six==1.16.0
 Werkzeug==3.0.4
+openai==1.12.0
+python-dotenv==1.0.0

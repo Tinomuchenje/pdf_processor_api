@@ -1,46 +1,55 @@
-from flask import Flask, request, jsonify, send_file, redirect
+"""
+PDF Processor API - LLM-powered PDF location extraction and splitting.
+Handles PDFs of any size (even 1000+ pages) with intelligent batch processing.
+"""
+
+import os
+import traceback
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from flasgger import Swagger, swag_from
-import os
-import traceback
 from pdf_processor import process_pdf
 
+# Configuration
+UPLOAD_FOLDER = 'uploads'
+MAX_FILE_SIZE = 16 * 1024 * 1024  # 16 MB
+
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 
-# Swagger configuration
-swagger_config = {
-    "headers": [],
-    "specs": [
-        {
-            "endpoint": 'apispec',
-            "route": '/apispec.json',
-            "rule_filter": lambda rule: True,  # all in
-            "model_filter": lambda tag: True,  # all in
-        }
-    ],
-    "static_url_path": "/flasgger_static",
+# Initialize Swagger UI
+Swagger(app, config={
+    "specs": [{"endpoint": 'apispec', "route": '/apispec.json'}],
     "swagger_ui": True,
     "specs_route": "/"
-}
+})
 
-Swagger(app, config=swagger_config)
+# Ensure upload folder exists
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'pdf'}
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB limit
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+def is_pdf(filename):
+    """Check if file is a PDF."""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
+
+
+# ============================================================================
+# API ENDPOINTS
+# ============================================================================
 
 @app.route('/process', methods=['POST'])
 @swag_from({
     'tags': ['PDF Processing'],
-    'summary': 'Process a PDF file with intelligent Building column search',
-    'description': 'Upload a PDF file and specify locations to search for. Uses intelligent Building column detection for improved accuracy on invoice tables. Automatically falls back to full-page search if needed. Includes OCR support for scanned PDFs.',
+    'summary': 'Process PDF with AI-powered location extraction',
+    'description': 'Upload PDF and extract pages by location using FREE LLM (Google Gemini). Supports 250+ page PDFs with intelligent batch processing. Includes OCR for scanned documents.',
     'parameters': [
         {
             'name': 'file',
@@ -56,145 +65,139 @@ def allowed_file(filename):
             'items': {'type': 'string'},
             'collectionFormat': 'multi',
             'required': True,
-            'description': 'List of locations to search for. System intelligently searches in Building column first for better accuracy.'
+            'description': 'Locations to find (e.g., ["Douglas Road", "Main Street"])'
         },
         {
-            'name': 'use_building_column',
+            'name': 'use_llm',
             'in': 'formData',
             'type': 'boolean',
             'required': False,
-            'description': 'Whether to use intelligent Building column search (default: true for improved accuracy)'
+            'description': 'Use LLM for intelligent matching (default: true, RECOMMENDED for ~95% accuracy)'
         },
         {
-            'name': 'use_ocr_fallback',
+            'name': 'use_ocr',
             'in': 'formData',
             'type': 'boolean',
             'required': False,
-            'description': 'Whether to use OCR fallback for scanned PDFs (default: true)'
+            'description': 'Use OCR for scanned PDFs (default: true)'
         }
     ],
     'responses': {
         200: {
-            'description': 'Successful operation',
+            'description': 'Success',
             'schema': {
                 'type': 'object',
                 'properties': {
-                    'files': {
-                        'type': 'array',
-                        'items': {'type': 'string'}
-                    },
-                    'location_pages': {
-                        'type': 'object',
-                        'additionalProperties': {
-                            'type': 'array',
-                            'items': {'type': 'integer'}
-                        }
-                    },
-                    'building_info': {
-                        'type': 'object',
-                        'description': 'Building information extracted from each page for transparency'
-                    },
-                    'search_method': {
-                        'type': 'string',
-                        'description': 'Search method used (building_column_with_fallback by default for improved accuracy)'
-                    },
-                    'improved_accuracy': {
-                        'type': 'boolean',
-                        'description': 'Whether improved building column search was used'
-                    }
+                    'files': {'type': 'array', 'items': {'type': 'string'}},
+                    'location_pages': {'type': 'object'},
+                    'building_info': {'type': 'object'},
+                    'search_method': {'type': 'string'},
+                    'improved_accuracy': {'type': 'boolean'}
                 }
             }
         },
-        400: {
-            'description': 'Bad request'
-        },
-        500: {
-            'description': 'Internal server error'
-        }
+        400: {'description': 'Bad request'},
+        500: {'description': 'Server error'}
     }
 })
 def process():
+    """Process PDF and split by locations."""
     try:
+        # Validate file upload
         if 'file' not in request.files:
-            return jsonify({'error': 'No file part'}), 400
+            return jsonify({'error': 'No file uploaded'}), 400
+        
         file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No selected file'}), 400
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
-            locations = request.form.getlist('locations')
-            # Always use building column search for improved accuracy (default: true)
-            use_building_column = request.form.get('use_building_column', 'true').lower() == 'true'
-            use_ocr_fallback = request.form.get('use_ocr_fallback', 'true').lower() == 'true'
-            result_files, location_pages, building_info = process_pdf(
-                file_path, locations, filename, use_building_column, use_ocr_fallback
-            )
-            # Determine actual search method used
-            search_method = 'building_column_with_fallback' if use_building_column else 'full_page_search'
-            
-            return jsonify({
-                'files': result_files,
-                'location_pages': location_pages,
-                'building_info': building_info,
-                'search_method': search_method,
-                'improved_accuracy': use_building_column
-            }), 200
-        return jsonify({'error': 'Invalid file type'}), 400
+        if not file.filename:
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not is_pdf(file.filename):
+            return jsonify({'error': 'Only PDF files allowed'}), 400
+        
+        # Save uploaded file
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(file_path)
+        
+        # Get parameters (support both new and legacy parameter names)
+        locations = request.form.getlist('locations')
+        use_llm = request.form.get('use_llm') or request.form.get('use_building_column', 'true')
+        use_llm = use_llm.lower() == 'true'
+        use_ocr = request.form.get('use_ocr') or request.form.get('use_ocr_fallback', 'true')
+        use_ocr = use_ocr.lower() == 'true'
+        
+        # Process PDF
+        result_files, location_pages, building_info = process_pdf(
+            file_path, locations, filename, use_llm, use_ocr
+        )
+        
+        # Return results
+        return jsonify({
+            'files': result_files,
+            'location_pages': location_pages,
+            'building_info': building_info,
+            'search_method': 'llm_based_extraction' if use_llm else 'simple_string_matching',
+            'improved_accuracy': use_llm
+        }), 200
+        
     except Exception as e:
-        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
 
 @app.route('/download/<filename>', methods=['GET'])
 @swag_from({
     'tags': ['File Download'],
-    'summary': 'Download a processed file',
-    'parameters': [
-        {
-            'name': 'filename',
-            'in': 'path',
-            'type': 'string',
-            'required': True,
-            'description': 'Name of the file to download'
-        }
-    ],
+    'summary': 'Download processed file',
+    'parameters': [{
+        'name': 'filename',
+        'in': 'path',
+        'type': 'string',
+        'required': True,
+        'description': 'Filename to download'
+    }],
     'responses': {
-        200: {
-            'description': 'File downloaded successfully'
-        },
-        404: {
-            'description': 'File not found'
-        }
+        200: {'description': 'File sent'},
+        404: {'description': 'File not found'}
     }
 })
 def download_file(filename):
+    """Download a processed PDF file."""
     try:
-        return send_file(os.path.join(app.config['UPLOAD_FOLDER'], filename), as_attachment=True)
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        return send_file(file_path, as_attachment=True)
     except Exception as e:
-        return jsonify({'error': str(e)}), 404
-    
+        return jsonify({'error': f'File not found: {str(e)}'}), 404
+
 @app.route('/hc', methods=['GET'])
 @swag_from({
     'tags': ['Health Check'],
-    'summary': 'API health check',
-    'responses': {
-        200: {
-            'description': 'API is healthy'
-        }
-    }
+    'summary': 'Health check',
+    'responses': {200: {'description': 'Healthy'}}
 })
 def health():
-   return 'Healthy', 200
+    """Health check endpoint."""
+    return 'Healthy', 200
+
+
+# ============================================================================
+# ERROR HANDLERS
+# ============================================================================
 
 @app.errorhandler(403)
-def forbidden_error(error):
+def forbidden(error):
     return jsonify({'error': 'Forbidden', 'message': str(error)}), 403
 
 @app.errorhandler(500)
-def internal_error(error):
-    return jsonify({'error': 'Internal Server Error', 'message': str(error)}), 500
+def server_error(error):
+    return jsonify({'error': 'Server error', 'message': str(error)}), 500
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# ============================================================================
+# RUN APPLICATION
+# ============================================================================
 
 if __name__ == '__main__':
     app.run(debug=True)
