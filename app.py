@@ -21,12 +21,19 @@ CORS(app)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 
-# Initialize Swagger UI
-Swagger(app, config={
+# Initialize Swagger UI with minimal config
+swagger_config = {
     "specs": [{"endpoint": 'apispec', "route": '/apispec.json'}],
     "swagger_ui": True,
-    "specs_route": "/"
-})
+    "specs_route": "/",
+    "headers": [],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui_bundle_js": "//unpkg.com/swagger-ui-dist@3/swagger-ui-bundle.js",
+    "swagger_ui_standalone_preset_js": "//unpkg.com/swagger-ui-dist@3/swagger-ui-standalone-preset.js",
+    "swagger_ui_css": "//unpkg.com/swagger-ui-dist@3/swagger-ui.css"
+}
+
+Swagger(app, config=swagger_config)
 
 # Ensure upload folder exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -44,6 +51,18 @@ def is_pdf(filename):
 # ============================================================================
 # API ENDPOINTS
 # ============================================================================
+
+@app.route('/', methods=['GET'])
+def home():
+    """API home page - redirects to Swagger UI."""
+    return jsonify({
+        'message': 'PDF Processor API - LLM-powered location extraction',
+        'version': '2.0.0',
+        'docs': '/',
+        'health': '/hc',
+        'process': '/process',
+        'download': '/download/<filename>'
+    }), 200
 
 @app.route('/process', methods=['POST'])
 @swag_from({
