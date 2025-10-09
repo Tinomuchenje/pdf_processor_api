@@ -1,0 +1,19 @@
+# Minimal requirements for PDF Processor API
+# Only essential packages - dependencies will be auto-installed
+
+# Core Flask framework
+Flask==3.0.3
+Flask-Cors==5.0.0
+
+# API Documentation
+flasgger==0.9.7.1
+
+# PDF Processing
+PyPDF2==3.0.1
+pdf2image==1.17.0
+pillow==10.4.0
+pytesseract==0.3.13
+
+# LLM Integration
+openai==1.12.0
+python-dotenv==1.0.0

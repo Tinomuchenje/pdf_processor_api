@@ -1,11 +1,10 @@
 # Use an official Python runtime as a parent image
 FROM python:3.9-slim
 
-# Install system dependencies for OCR (minimal set)
+# Install minimal system dependencies for OCR
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-eng \
-    libglib2.0-0 \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
@@ -13,10 +12,10 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /usr/src/app
 
 # Copy requirements first for better caching
-COPY requirements.txt .
+COPY requirements-minimal.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-minimal.txt
 
 # Copy the rest of the application
 COPY . .
