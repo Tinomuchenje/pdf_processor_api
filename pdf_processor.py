@@ -291,12 +291,12 @@ def find_locations_simple(pages_text, expected_locations):
         # Try to extract Building column data first
         building_data = extract_building_column_data(page_text)
         
-            for location in expected_locations:
+        for location in expected_locations:
             # Search in Building column data if available
             if building_data:
                 if any(location.lower() in building.lower() for building in building_data):
-                        location_pages[location].append(i + 1)
-        else:
+                    location_pages[location].append(i + 1)
+            else:
                 # Fallback to full page search
                 if location.lower() in page_text.lower():
                     location_pages[location].append(i + 1)
