@@ -200,4 +200,8 @@ def server_error(error):
 # ============================================================================
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Get port from environment variable (Render sets PORT)
+    port = int(os.environ.get('PORT', 5001))
+    debug = os.environ.get('FLASK_ENV') == 'development'
+    
+    app.run(host='0.0.0.0', port=port, debug=debug)
