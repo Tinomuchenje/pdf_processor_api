@@ -84,21 +84,7 @@ def home():
             'items': {'type': 'string'},
             'collectionFormat': 'multi',
             'required': True,
-            'description': 'Locations to find (e.g., ["Douglas Road", "Main Street"])'
-        },
-        {
-            'name': 'use_llm',
-            'in': 'formData',
-            'type': 'boolean',
-            'required': False,
-            'description': 'Use LLM for intelligent matching (default: true, RECOMMENDED for ~95% accuracy)'
-        },
-        {
-            'name': 'use_ocr',
-            'in': 'formData',
-            'type': 'boolean',
-            'required': False,
-            'description': 'Use OCR for scanned PDFs (default: true)'
+            'description': 'Locations to find in Building column (e.g., ["HILLSIDE", "OK MART"])'
         }
     ],
     'responses': {
@@ -109,9 +95,7 @@ def home():
                 'properties': {
                     'files': {'type': 'array', 'items': {'type': 'string'}},
                     'location_pages': {'type': 'object'},
-                    'building_info': {'type': 'object'},
-                    'search_method': {'type': 'string'},
-                    'improved_accuracy': {'type': 'boolean'}
+                    'building_info': {'type': 'object'}
                 }
             }
         },
@@ -138,25 +122,19 @@ def process():
         file_path = os.path.join(UPLOAD_FOLDER, filename)
         file.save(file_path)
         
-        # Get parameters (support both new and legacy parameter names)
+        # Get locations parameter
         locations = request.form.getlist('locations')
-        use_llm = request.form.get('use_llm') or request.form.get('use_building_column', 'true')
-        use_llm = use_llm.lower() == 'true'
-        use_ocr = request.form.get('use_ocr') or request.form.get('use_ocr_fallback', 'true')
-        use_ocr = use_ocr.lower() == 'true'
         
-        # Process PDF
+        # Process PDF with optimal settings (always use LLM + OCR)
         result_files, location_pages, building_info = process_pdf(
-            file_path, locations, filename, use_llm, use_ocr
+            file_path, locations, filename
         )
         
         # Return results
         return jsonify({
             'files': result_files,
             'location_pages': location_pages,
-            'building_info': building_info,
-            'search_method': 'llm_based_extraction' if use_llm else 'simple_string_matching',
-            'improved_accuracy': use_llm
+            'building_info': building_info
         }), 200
         
     except Exception as e:

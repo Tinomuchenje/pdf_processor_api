@@ -154,16 +154,12 @@ Process a PDF file and split it by locations found in the Building column.
 curl -X POST http://localhost:5001/process \
   -F "file=@invoice.pdf" \
   -F "locations=HILLSIDE" \
-  -F "locations=OK MART" \
-  -F "use_llm=true" \
-  -F "use_ocr=true"
+  -F "locations=OK MART"
 ```
 
 **Parameters:**
 - `file` (required): PDF file to process
-- `locations` (required): List of location names to search for
-- `use_llm` (optional): Use LLM for intelligent matching (default: true)
-- `use_ocr` (optional): Use OCR fallback for scanned PDFs (default: true)
+- `locations` (required): List of location names to search for in Building column
 
 **Response:**
 ```json
@@ -179,9 +175,7 @@ curl -X POST http://localhost:5001/process \
     "page_3": ["HILLSIDE BULAWAYO"],
     "page_4": ["OK MART BULAWAYO"],
     "page_5": ["HILLSIDE BULAWAYO"]
-  },
-  "search_method": "llm_based_extraction",
-  "improved_accuracy": true
+  }
 }
 ```
 
@@ -368,25 +362,13 @@ OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
 OPENROUTER_MODEL=google/gemini-pro
 ```
 
-### Disable LLM (Fallback Mode)
+### Optimal Configuration
 
-If you want to test without LLM:
-```bash
-curl -X POST http://localhost:5001/process \
-  -F "file=@invoice.pdf" \
-  -F "locations=HILLSIDE" \
-  -F "use_llm=false"
-```
-
-### Disable OCR
-
-If you don't need OCR for scanned PDFs:
-```bash
-curl -X POST http://localhost:5001/process \
-  -F "file=@invoice.pdf" \
-  -F "locations=HILLSIDE" \
-  -F "use_ocr=false"
-```
+The API is now optimized to always use the best settings:
+- ✅ **Always uses LLM** - FREE Google Gemini for ~95% accuracy
+- ✅ **Automatic OCR** - Detects and processes scanned PDFs
+- ✅ **Building column focus** - Searches only in Building column data
+- ✅ **No configuration needed** - Works optimally out of the box
 
 ---
 

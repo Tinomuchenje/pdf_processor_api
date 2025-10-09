@@ -13,7 +13,7 @@ pillow==10.4.0
 pytesseract==0.3.13
 
 # LLM Integration
-openai==1.12.0
+requests==2.31.0
 python-dotenv==1.0.0
 
 # Essential Flask dependencies (auto-installed but pinned for stability)

@@ -6,10 +6,10 @@ Optimized for large PDFs (250+ pages) with batch processing.
 import re
 import os
 import json
+import requests
 from collections import defaultdict
 
 from PyPDF2 import PdfReader, PdfWriter
-from openai import OpenAI
 from dotenv import load_dotenv
 import pytesseract
 from pdf2image import convert_from_path
@@ -27,16 +27,17 @@ LARGE_PDF_THRESHOLD = 100  # Pages threshold for optimization
 # HELPER FUNCTIONS
 # ============================================================================
 
-def get_llm_client():
-    """Get configured OpenRouter LLM client."""
+def get_openrouter_config():
+    """Get OpenRouter configuration."""
     api_key = os.getenv('OPENROUTER_API_KEY')
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY not found. Get one at https://openrouter.ai/keys")
     
-    return OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=api_key,
-    )
+    return {
+        'api_key': api_key,
+        'base_url': 'https://openrouter.ai/api/v1',
+        'model': os.getenv('OPENROUTER_MODEL', FREE_LLM_MODEL)
+    }
 
 def parse_llm_json_response(response_text):
     """Parse JSON from LLM response, handling markdown code blocks."""
@@ -54,17 +55,30 @@ def parse_llm_json_response(response_text):
 def call_llm(prompt, max_tokens=500):
     """Call LLM with prompt and return parsed JSON response."""
     try:
-        client = get_llm_client()
-        model = os.getenv('OPENROUTER_MODEL', FREE_LLM_MODEL)
+        config = get_openrouter_config()
         
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=max_tokens
+        headers = {
+            "Authorization": f"Bearer {config['api_key']}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": config['model'],
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.1,
+            "max_tokens": max_tokens
+        }
+        
+        response = requests.post(
+            f"{config['base_url']}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=30
         )
         
-        result_text = response.choices[0].message.content.strip()
+        response.raise_for_status()
+        result = response.json()
+        result_text = result['choices'][0]['message']['content'].strip()
         return parse_llm_json_response(result_text)
     
     except json.JSONDecodeError as e:
@@ -365,30 +379,25 @@ def create_split_pdfs(reader, location_pages, filename):
 # MAIN PROCESSING FUNCTION
 # ============================================================================
 
-def process_pdf(input_pdf, expected_locations, filename, use_llm=True, use_ocr=True):
+def process_pdf(input_pdf, expected_locations, filename):
     """
     Process PDF to find and split pages by location using LLM.
+    Always uses LLM for intelligent matching and OCR when needed.
     
     Args:
         input_pdf: PDF file path
-        expected_locations: List of location names to find
+        expected_locations: List of location names to find in Building column
         filename: Original filename for output naming
-        use_llm: Use LLM for intelligent matching (default: True, RECOMMENDED)
-        use_ocr: Use OCR fallback for scanned PDFs (default: True)
     
     Returns:
         (result_files, location_pages, building_info)
     """
-    # Extract text from PDF
-    pages_text = get_pdf_text(input_pdf, use_ocr)
+    # Extract text from PDF (with automatic OCR fallback)
+    pages_text = get_pdf_text(input_pdf, use_ocr_fallback=True)
     
     # Find which pages contain which locations (searching Building column only)
-    if use_llm:
-        print("🤖 Using FREE LLM to search Building column for maximum accuracy...")
-        location_pages = find_locations_in_all_pages(pages_text, expected_locations)
-    else:
-        print("⚠️  Using simple string matching in Building column (lower accuracy)")
-        location_pages = find_locations_simple(pages_text, expected_locations)
+    print("🤖 Using FREE LLM to search Building column for maximum accuracy...")
+    location_pages = find_locations_in_all_pages(pages_text, expected_locations)
     
     # Extract building info for transparency
     building_info = extract_building_info(pages_text, location_pages)
